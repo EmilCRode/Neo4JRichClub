@@ -17,9 +17,9 @@ public class Neo4JHandler {
         SessionFactory sessionFactory = new SessionFactory(configuration, "org.ScientificWorksRelationshipGraph");
         session = sessionFactory.openSession();
         networkEdgesRaw = new ArrayList<>();
-        Iterable<Map<String, Object>> results = session.query("MATCH((a1:Author)-[r:AUTHORCITES]->(a2:Author)) RETURN a1,a1.in_degree, a2, a2.in_degree", new HashMap<>()).queryResults();
+        Iterable<Map<String, Object>> results = session.query("MATCH((a1:Author)-[r:AUTHORCITES]->(a2:Author)) RETURN a1,a1.in_degree,a1.out_degree, a2, a2.in_degree, a2.out_degree", new HashMap<>()).queryResults();
         for(Map<String, Object> result: results){
-            networkEdgesRaw.add(new NetworkEdge(new NetworkNode((Node) result.get("a1"), ((Long) result.get("a1.in_degree")).intValue() ), new NetworkNode((Node) result.get("a2"), ((Long) result.get("a2.in_degree")).intValue() )));
+            networkEdgesRaw.add(new NetworkEdge(new NetworkNode((Node) result.get("a1"), ((Long) result.get("a1.in_degree")).intValue(), ((Long) result.get("a1.out_degree")).intValue() ), new NetworkNode((Node) result.get("a2"), ((Long) result.get("a2.in_degree")).intValue(), ((Long) result.get("a2.out_degree")).intValue())));
         }
         networkEdgesCM = cannistraciMuscoloni(networkEdgesRaw);
     }
@@ -27,25 +27,46 @@ public class Neo4JHandler {
         int maxDegree = 0;
         Map<Long,Integer> nodes =new HashMap<>();
         for(NetworkEdge edge : networkEdgesRaw){
-            nodes.put(edge.getStartNode().getId(), edge.getStartNode().getDegree());
-            nodes.put(edge.getEndNode().getId(), edge.getEndNode().getDegree());
-            maxDegree = Math.max(edge.getStartNode().getDegree(), maxDegree);
-            maxDegree = Math.max((edge.getEndNode().getDegree()), maxDegree);
+            nodes.put(edge.getStartNode().getId(), edge.getStartNode().getInDegree());
+            nodes.put(edge.getEndNode().getId(), edge.getEndNode().getInDegree());
+            maxDegree = Math.max(edge.getStartNode().getInDegree(), maxDegree);
+            maxDegree = Math.max((edge.getEndNode().getInDegree()), maxDegree);
         }
         for(int k = 0; k < maxDegree; k++){
-            System.out.println("InDegree: "+ k + " RC-Coeefficient: " + calculateInDegreeRichClubCoefficient(k,nodes));
+            double richClubCoefficient = calculateInDegreeRichClubCoefficient(k,nodes);
+            double randomRCC = calculateDirectedRandomRichClubCoefficient(k,nodes);
+            System.out.println("InDegree: "+ k + " RC-Coeefficient: " + richClubCoefficient / randomRCC);
         }
     }
-    public double calculateInDegreeRichClubCoefficient(int kDegree, Map<Long,Integer> nodes){
+    public double calculateInDegreeRichClubCoefficient(int kInDegree, Map<Long,Integer> nodes){
         int nrOfEdges = 0;
         int nrOfNodes = 0;
         for(NetworkEdge edge: networkEdgesRaw){
-            nrOfEdges += (edge.getStartNode().getDegree() < kDegree || edge.getEndNode().getDegree() < kDegree) ? 0 : 1;
+            nrOfEdges += (edge.getStartNode().getInDegree() < kInDegree || edge.getEndNode().getInDegree() < kInDegree) ? 0 : 1;
         }
+        for(Long id : nodes.keySet()){
+            if(nodes.get(id) > kInDegree){ nrOfNodes++; }
+        }
+        return (double) nrOfEdges/(nrOfNodes*(nrOfNodes-1));
+    }
+    public double calculateDirectedRandomRichClubCoefficient(int kDegree, Map<Long, Integer> nodes){
+        int nrOfNodes = 0;
+        int nrOfInLinks = 0;
+        int nrOfOutLinks = 0;
         for(Long id : nodes.keySet()){
             if(nodes.get(id) > kDegree){ nrOfNodes++; }
         }
-        return (double) nrOfEdges/(nrOfNodes*(nrOfNodes-1));
+        for(NetworkEdge edge: networkEdgesRaw){
+            if(edge.getStartNode().getOutDegree() > kDegree){
+                nrOfOutLinks ++;
+            }
+            if(edge.getEndNode().getInDegree() > kDegree){
+                nrOfInLinks ++;
+            }
+        }
+        long denominator = (long) networkEdgesRaw.size()* nrOfNodes * (nrOfNodes - 1);
+        if(denominator == 0){ return Double.NaN;}
+        return (double)(nrOfInLinks * nrOfOutLinks) / denominator;
     }
     public void generateNullModelNetwork(int iterations){
         int count = 0;
@@ -97,7 +118,7 @@ public class Neo4JHandler {
         int sumWeight1 = 0;
         int sumWeight2 = 0;
         for(NetworkEdge edge: edges) {
-            int weight1 = edge.getStartNode().getDegree() * edge.getEndNode().getDegree();
+            int weight1 = edge.getStartNode().getInDegree() * edge.getEndNode().getInDegree();
             maxWeight1 = Math.max(weight1, maxWeight1);
             minWeight2 = Math.min(weight1, minWeight2);
             edge.setWeight1(weight1);
