@@ -1,21 +1,24 @@
 package org.Neo4jRichClub;
 
+import com.opencsv.CSVWriter;
 import org.neo4j.ogm.config.*;
 import org.neo4j.ogm.model.Node;
 import org.neo4j.ogm.session.Session;
 import org.neo4j.ogm.session.SessionFactory;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 
 public class Neo4JHandler {
-    private final Session session;
-    private List<NetworkEdge> networkEdgesCM;
-    private List<NetworkEdge> networkEdgesRaw;
+    private final List<NetworkEdge> networkEdgesCM;
+    private final List<NetworkEdge> networkEdgesRaw;
     public Neo4JHandler() {
         ConfigurationSource props = new FileConfigurationSource("neo4j.properties");
         Configuration configuration = new Configuration.Builder(props).build();
         SessionFactory sessionFactory = new SessionFactory(configuration, "org.ScientificWorksRelationshipGraph");
-        session = sessionFactory.openSession();
+        Session session = sessionFactory.openSession();
         networkEdgesRaw = new ArrayList<>();
         Iterable<Map<String, Object>> results = session.query("MATCH((a1:Author)-[r:AUTHORCITES]->(a2:Author)) RETURN a1,a1.in_degree,a1.out_degree, a2, a2.in_degree, a2.out_degree", new HashMap<>()).queryResults();
         for(Map<String, Object> result: results){
@@ -37,6 +40,23 @@ public class Neo4JHandler {
             double randomRCC = calculateDirectedRandomRichClubCoefficient(k,nodes);
             System.out.println("InDegree: "+ k + " RC-Coeefficient: " + richClubCoefficient / randomRCC);
         }
+    }
+    public void writeDirectedRCCoefficientsToCSV(String filepath) throws IOException{
+        int maxDegree = 0;
+        Map<Long,Integer> nodes =new HashMap<>();
+        List<String[]> lines = new ArrayList<>();
+        for(NetworkEdge edge : networkEdgesRaw){
+            nodes.put(edge.getStartNode().getId(), edge.getStartNode().getInDegree());
+            nodes.put(edge.getEndNode().getId(), edge.getEndNode().getInDegree());
+            maxDegree = Math.max(edge.getStartNode().getInDegree(), maxDegree);
+            maxDegree = Math.max((edge.getEndNode().getInDegree()), maxDegree);
+        }
+        for(int k = 0; k < maxDegree; k++){
+            double richClubCoefficient = calculateInDegreeRichClubCoefficient(k,nodes);
+            double randomRCC = calculateDirectedRandomRichClubCoefficient(k,nodes);
+            lines.add(new String[]{Integer.toString(k), Double.toString(richClubCoefficient), Double.toString(randomRCC), Double.toString(richClubCoefficient/randomRCC) });
+        }
+        writeDataToCsv(filepath, new String[]{"Degree", "RichClub", "randomRichClub", "normalizedRichClub"}, lines);
     }
     public double calculateInDegreeRichClubCoefficient(int kInDegree, Map<Long,Integer> nodes){
         int nrOfEdges = 0;
@@ -68,7 +88,7 @@ public class Neo4JHandler {
         if(denominator == 0){ return Double.NaN;}
         return (double)(nrOfInLinks * nrOfOutLinks) / denominator;
     }
-    public void generateNullModelNetwork(int iterations){
+    public void generateNullModelNetworkCM(int iterations){
         int count = 0;
         while(count < iterations){
             NetworkEdge edgeAB = pickByProbability1(networkEdgesCM);
@@ -130,8 +150,8 @@ public class Neo4JHandler {
             sumWeight2 += weight2;
         }
         for(NetworkEdge edge: edges){
-            edge.setP1((double)(edge.getWeight1()/(double) sumWeight1));
-            edge.setP2((double)(edge.getWeight2()/(double) sumWeight2));
+            edge.setP1(edge.getWeight1()/(double) sumWeight1);
+            edge.setP2(edge.getWeight2()/(double) sumWeight2);
         }
         return edges;
     }
@@ -142,5 +162,31 @@ public class Neo4JHandler {
             }
         }
         return false;
+    }
+    public static void writeDataToCsv(String filePath,String[] header, List<String[]> lines) throws IOException {
+        // first create file object for file placed at location
+        // specified by filepath
+        File file = new File(filePath);
+        try {
+            // create FileWriter object with file as parameter
+            FileWriter outputfile = new FileWriter(file);
+
+            // create CSVWriter object filewriter object as parameter
+            CSVWriter writer = new CSVWriter(outputfile);
+
+            // adding header to csv
+            writer.writeNext(header);
+
+            // add data to csv
+            for(String[] line : lines){
+                writer.writeNext(line);
+            }
+
+            // closing writer connection
+            writer.close();
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
