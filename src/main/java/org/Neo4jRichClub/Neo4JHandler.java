@@ -34,7 +34,6 @@ public class Neo4JHandler {
         Map<Long, Integer> nodeInDegreeMap = new HashMap<>();
         int maxInDegree = 0;
         List<String[]> csvLines = new ArrayList<>();
-        String[] header = new String[]{"InDegree", "NrOfNodes"};
         for(NetworkEdge edge : networkEdgesAuthorCites){
             nodeInDegreeMap.put(edge.getStartNode().getId(), edge.getStartNode().getInDegree());
             maxInDegree = Math.max(edge.getStartNode().getInDegree(), maxInDegree);
@@ -48,6 +47,7 @@ public class Neo4JHandler {
         for(int i = 0; i < degreeDistribution.length; i++){
             csvLines.add(new String[]{Integer.toString(i), Integer.toString(degreeDistribution[i])});
         }
+        String[] header = new String[]{"indegree", "nrofnodes"};
         String filepath = directorypath + "degreedistribution_citations.csv";
         writeDataToCsv(filepath, header,csvLines);
     }
@@ -84,9 +84,9 @@ public class Neo4JHandler {
             lines.add(new String[]{Integer.toString(k), Double.toString(richClubCoefficient), Double.toString(randomRCC), Double.toString(richClubCoefficient/randomRCC) });
         }
         String filepath = directorypath + "richclub_citations.csv";
-        writeDataToCsv(filepath, new String[]{"Degree", "RichClub", "randomRichClub", "normalizedRichClub"}, lines);
+        writeDataToCsv(filepath, new String[]{"indegree", "richclub", "randomrichclub", "normalizedrichclub"}, lines);
     }
-    public double calculateInDegreeRichClubCoefficient(int kInDegree, Map<Long,Integer> nodes, List<NetworkEdge> networkEdgesAuthorCites){
+    private double calculateInDegreeRichClubCoefficient(int kInDegree, Map<Long,Integer> nodes, List<NetworkEdge> networkEdgesAuthorCites){
         int nrOfEdges = 0;
         int nrOfNodes = 0;
         for(NetworkEdge edge: networkEdgesAuthorCites){
@@ -97,7 +97,7 @@ public class Neo4JHandler {
         }
         return (double) nrOfEdges/(nrOfNodes*(nrOfNodes-1));
     }
-    public double calculateDirectedRandomRichClubCoefficient(int kDegree, Map<Long, Integer> nodes, List<NetworkEdge> networkEdgesAuthorCites){
+    private double calculateDirectedRandomRichClubCoefficient(int kDegree, Map<Long, Integer> nodes, List<NetworkEdge> networkEdgesAuthorCites){
         int nrOfNodes = 0;
         int nrOfInLinks = 0;
         int nrOfOutLinks = 0;
@@ -116,8 +116,7 @@ public class Neo4JHandler {
         if(denominator == 0){ return Double.NaN;}
         return (double)(nrOfInLinks * nrOfOutLinks) / denominator;
     }
-
-    public void writeUndirectedRCCToCSV(String directorypath)throws IOException{
+    public void writeAuthorcitesRCCToCSV(String directorypath)throws IOException{
         List<String[]> csvLines = new ArrayList<>();
         List<NetworkEdge> edgesAuthorCoCitation = queryForAuthorCoCitation();
         int maxDegree = 0;
@@ -138,7 +137,28 @@ public class Neo4JHandler {
         String[] header = new String[]{"degree", "richclub", "randomrichclub", "normalizedrichclub"};
         writeDataToCsv(filepath, header, csvLines);
     }
-    public double calculateUndirectedRCC(int kDegree, Map<Long,Integer> nodes, List<NetworkEdge> networkEdgesAuthorCoCites){
+    public void writeAuthorBibCouplingRCCToCSV(String directorypath)throws IOException{
+        List<String[]> csvLines = new ArrayList<>();
+        List<NetworkEdge> edgesAuthorBibCoupling = queryForAuthorBibCoupling();
+        int maxDegree = 0;
+        Map<Long,Integer> nodes =new HashMap<>();
+        for(NetworkEdge edge : edgesAuthorBibCoupling){
+            nodes.put(edge.getStartNode().getId(), edge.getStartNode().getDegree());
+            nodes.put(edge.getEndNode().getId(), edge.getEndNode().getDegree());
+            maxDegree = Math.max(edge.getStartNode().getDegree(), maxDegree);
+            maxDegree = Math.max((edge.getEndNode().getDegree()), maxDegree);
+        }
+        List<NetworkEdge> edgesNullModell = generateNullModelNetworkCM(edgesAuthorBibCoupling,10*edgesAuthorBibCoupling.size());
+        for(int k = 0; k < maxDegree; k++){
+            double richClubCoefficient = calculateUndirectedRCC(k,nodes,edgesAuthorBibCoupling);
+            double randomRCC = calculateUndirectedRCC(k,nodes, edgesNullModell);
+            csvLines.add(new String[]{Integer.toString(k), Double.toString(richClubCoefficient), Double.toString(randomRCC), Double.toString(richClubCoefficient/randomRCC) });
+        }
+        String filepath = directorypath + "richclub_authorbibcoupling.csv";
+        String[] header = new String[]{"degree", "richclub", "randomrichclub", "normalizedrichclub"};
+        writeDataToCsv(filepath, header, csvLines);
+    }
+    private double calculateUndirectedRCC(int kDegree, Map<Long,Integer> nodes, List<NetworkEdge> networkEdgesAuthorCoCites){
         int nrOfEdges = 0;
         int nrOfNodes = 0;
         for(NetworkEdge edge: networkEdgesAuthorCoCites){
@@ -149,7 +169,7 @@ public class Neo4JHandler {
         }
         return (double) nrOfEdges*2/(nrOfNodes*(nrOfNodes-1));
     }
-    public List<NetworkEdge> generateNullModelNetworkCM(List<NetworkEdge> inputEdges,int iterations){
+    private List<NetworkEdge> generateNullModelNetworkCM(List<NetworkEdge> inputEdges,int iterations){
         List<NetworkEdge> edges= new ArrayList<>();
         for(NetworkEdge inputEdge : inputEdges){
             edges.add(inputEdge.clone());
@@ -188,7 +208,7 @@ public class Neo4JHandler {
         }
         return edges;
     }
-    public List<NetworkEdge> cannistraciMuscoloni(List<NetworkEdge> edges){
+    private List<NetworkEdge> cannistraciMuscoloni(List<NetworkEdge> edges){
         sumWeights1 = 0;
         sumWeights2 = 0;
         maxWeight1 = 0;
@@ -208,7 +228,7 @@ public class Neo4JHandler {
         }
         return edges;
     }
-    public NetworkEdge pickByProbability1(List<NetworkEdge> edges){
+    private NetworkEdge pickByProbability1(List<NetworkEdge> edges){
         double sumOfProbalities = 0.0;
         for(NetworkEdge edge : edges)
         {
@@ -222,7 +242,7 @@ public class Neo4JHandler {
         }
         return null;
     }
-    public NetworkEdge pickByProbability2(List<NetworkEdge> edges){
+    private NetworkEdge pickByProbability2(List<NetworkEdge> edges){
         double sumOfProbalities = 0.0;
         for(NetworkEdge edge : edges)
         {
@@ -236,7 +256,7 @@ public class Neo4JHandler {
         }
         return null;
     }
-    public boolean edgeExists(List<NetworkEdge> edges, NetworkNode startNode, NetworkNode endNode){
+    private boolean edgeExists(List<NetworkEdge> edges, NetworkNode startNode, NetworkNode endNode){
         for(NetworkEdge edge: edges){
             if(edge.getStartNode().equals(startNode) && edge.getEndNode().equals(endNode)){
                 return true;
@@ -244,7 +264,7 @@ public class Neo4JHandler {
         }
         return false;
     }
-    public static void writeDataToCsv(String filePath,String[] header, List<String[]> lines) throws IOException {
+    private static void writeDataToCsv(String filePath,String[] header, List<String[]> lines) throws IOException {
         // first create file object for file placed at location
         // specified by filepath
         File file = new File(filePath);
@@ -270,7 +290,7 @@ public class Neo4JHandler {
             e.printStackTrace();
         }
     }
-    public List<NetworkEdge> queryForAuthorCites(){
+    private List<NetworkEdge> queryForAuthorCites(){
         List<NetworkEdge> networkEdgesAuthorCites = new ArrayList<>();
         Iterable<Map<String, Object>> resultsAuthorcites = session.query("MATCH((a1:Author)-[r:AUTHORCITES]->(a2:Author)) RETURN a1,a1.in_degree,a1.out_degree, a2, a2.in_degree, a2.out_degree", new HashMap<>()).queryResults();
         for(Map<String, Object> result: resultsAuthorcites){
@@ -278,12 +298,21 @@ public class Neo4JHandler {
         }
         return networkEdgesAuthorCites;
     }
-    public List<NetworkEdge> queryForAuthorCoCitation(){
+    private List<NetworkEdge> queryForAuthorCoCitation(){
         List<NetworkEdge> networkEdgesAuthorCoCitation = new ArrayList<>();
         // WARNING: This uses the deprecated function id()
         Iterable<Map<String, Object>> resultsAuthorCocitation = session.query("match (a1)-[r:AUTHORCOCITATION]-(a2) where id(a1) < id(a2) return a1, a1.degreeCoCitation, a2, a2.degreeCoCitation", new HashMap<>()).queryResults();
         for(Map<String, Object> result: resultsAuthorCocitation){
             networkEdgesAuthorCoCitation.add(new NetworkEdge(new NetworkNode((Node) result.get("a1"), ((Long) result.get("a1.degreeCoCitation")).intValue() ), new NetworkNode((Node) result.get("a2"), ((Long) result.get("a2.degreeCoCitation")).intValue())));
+        }
+        return networkEdgesAuthorCoCitation;
+    }
+    private List<NetworkEdge> queryForAuthorBibCoupling(){
+        List<NetworkEdge> networkEdgesAuthorCoCitation = new ArrayList<>();
+        // WARNING: This uses the deprecated function id()
+        Iterable<Map<String, Object>> resultsAuthorCocitation = session.query("match (a1)-[r:BIBCOUPLINGAUTHOR]-(a2) where id(a1) < id(a2) return a1, a1.degreeBibCoupling, a2, a2.degreeBibCoupling", new HashMap<>()).queryResults();
+        for(Map<String, Object> result: resultsAuthorCocitation){
+            networkEdgesAuthorCoCitation.add(new NetworkEdge(new NetworkNode((Node) result.get("a1"), ((Long) result.get("a1.degreeBibCoupling")).intValue() ), new NetworkNode((Node) result.get("a2"), ((Long) result.get("a2.degreeBibCoupling")).intValue())));
         }
         return networkEdgesAuthorCoCitation;
     }
